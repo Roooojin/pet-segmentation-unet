@@ -11,3 +11,42 @@ Oxford-IIIT Pet via `tensorflow_datasets` (`oxford_iiit_pet`).
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+```
+## train
+```bash
+python train.py
+```
+Saves best model to: outputs/best_unet.keras
+
+## Evaluate (Baseline)
+```bash
+python test.py
+```
+Baseline results (Test):
+
+| Split |   Loss |   mIoU |   Dice |
+| ----: | -----: | -----: | -----: |
+|  Test | 0.3004 | 0.7151 | 0.8197 |
+
+
+## Demo (Streamlit)
+```bash
+streamlit run app.py
+```
+## Qualitative Results
+
+### Sample prediction (test set)
+![pred0](assets/pred_0.png)
+
+### Streamlit UI demo output
+![ui](assets/ui_result.png)
+
+## Project Structure
+
+```md
+- `train.py` training script
+- `test.py` evaluation + saves prediction samples to `outputs/`
+- `app.py` Streamlit inference UI
+- `assets/` images used in README
+- `outputs/` generated files (ignored by git)
+```
