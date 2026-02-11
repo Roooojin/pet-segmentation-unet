@@ -22,11 +22,11 @@ Saves best model to: outputs/best_unet.keras
 ```bash
 python test.py
 ```
-Baseline results (Test):
+Baseline results (Test) after Train/Val split (90/10):
 
 | Split |   Loss |   mIoU |   Dice |
-| ----: | -----: | -----: | -----: |
-|  Test | 0.3004 | 0.7151 | 0.8197 |
+| ----: |-------:|-------:|-------:|
+|  Test | 0.3139 | 0.7023 | 0.8111 |
 
 
 ## Demo (Streamlit)
