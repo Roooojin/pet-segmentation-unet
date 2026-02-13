@@ -15,7 +15,7 @@
 #
 # OUTPUT_DIR = "outputs"
 # os.makedirs(OUTPUT_DIR, exist_ok=True)
-# MODEL_PATH = os.path.join(OUTPUT_DIR, "best_unet.keras")
+# MODEL_PATH = os.path.join(OUTPUT_DIR, "best_unet.keras")  # توجه: این مدل قبلی رو overwrite می‌کنه
 #
 # tf.random.set_seed(SEED)
 # np.random.seed(SEED)
@@ -25,25 +25,32 @@
 # print("Saving best model to:", MODEL_PATH)
 #
 # # =============================
-# # Dataset
+# # Dataset (Train / Val / Test)
 # # =============================
-# (ds, info) = tfds.load("oxford_iiit_pet", with_info=True)
-# train_raw = ds["train"]
-# test_raw = ds["test"]
-#
 # NUM_CLASSES = 3  # masks 1..3 -> shift to 0..2
+# VAL_PCT = 10     # 10% of train for validation
+#
+# (splits, info) = tfds.load(
+#     "oxford_iiit_pet",
+#     split=[f"train[:{100-VAL_PCT}%]", f"train[{100-VAL_PCT}%:]", "test"],
+#     with_info=True,
+#     shuffle_files=False,  # deterministic split
+# )
+#
+# train_raw, val_raw, test_raw = splits
 #
 # def to_image_mask(example):
 #     return example["image"], example["segmentation_mask"]
 #
 # train_raw = train_raw.map(to_image_mask, num_parallel_calls=AUTOTUNE)
+# val_raw   = val_raw.map(to_image_mask, num_parallel_calls=AUTOTUNE)
 # test_raw  = test_raw.map(to_image_mask, num_parallel_calls=AUTOTUNE)
 #
 # def preprocess(image, mask):
 #     image = tf.image.resize(image, (IMG_SIZE, IMG_SIZE))
 #     mask  = tf.image.resize(mask,  (IMG_SIZE, IMG_SIZE), method="nearest")
 #     image = tf.cast(image, tf.float32) / 255.0
-#     mask  = tf.cast(mask, tf.int32) - 1  # keep [H,W,1]
+#     mask  = tf.cast(mask, tf.int32) - 1  # keep [H,W,1] -> values 0..2
 #     return image, mask
 #
 # def augment(image, mask):
@@ -66,6 +73,12 @@
 #             .batch(BATCH_SIZE)
 #             .prefetch(AUTOTUNE))
 #
+# val_ds = (val_raw
+#           .map(preprocess, num_parallel_calls=AUTOTUNE)
+#           .map(finalize_mask, num_parallel_calls=AUTOTUNE)
+#           .batch(BATCH_SIZE)
+#           .prefetch(AUTOTUNE))
+#
 # test_ds = (test_raw
 #            .map(preprocess, num_parallel_calls=AUTOTUNE)
 #            .map(finalize_mask, num_parallel_calls=AUTOTUNE)
@@ -74,7 +87,9 @@
 #
 # # sanity check
 # for images, masks in train_ds.take(1):
-#     print("Sanity check:", images.shape, masks.shape, np.unique(masks[0].numpy()))
+#     print("Sanity check (train):", images.shape, masks.shape, np.unique(masks[0].numpy()))
+# for images, masks in val_ds.take(1):
+#     print("Sanity check (val):  ", images.shape, masks.shape, np.unique(masks[0].numpy()))
 #
 # # =============================
 # # U-Net model
@@ -118,7 +133,7 @@
 #     return tf.keras.Model(inputs, outputs)
 #
 # # =============================
-# # Metrics (vectorized, TF2.20-safe)
+# # Metrics
 # # =============================
 # def mean_iou(y_true, y_pred):
 #     y_true = tf.cast(y_true, tf.int32)
@@ -169,10 +184,11 @@
 #     )
 # ]
 #
-# history = model.fit(train_ds, validation_data=test_ds, epochs=EPOCHS, callbacks=callbacks)
+# # ✅ مهم: validation_data الان val_ds است (نه test_ds)
+# history = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS, callbacks=callbacks)
 #
 # # =============================
-# # Save plots (no plt.show to avoid blocking)
+# # Save plots
 # # =============================
 # def save_plot(y1, y2, title, ylabel, filename):
 #     plt.figure(figsize=(7, 4))
@@ -196,45 +212,65 @@
 # print("Best model saved at:", MODEL_PATH)
 
 
+
 import os
+import argparse
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import matplotlib.pyplot as plt
 
 # =============================
-# Config
+# Args
 # =============================
-AUTOTUNE = tf.data.AUTOTUNE
-IMG_SIZE = 128
-BATCH_SIZE = 16
-EPOCHS = 12
-SEED = 42
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--img_size", type=int, default=128)
+    p.add_argument("--batch_size", type=int, default=16)
+    p.add_argument("--epochs", type=int, default=12)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--val_pct", type=int, default=10, help="Percent of train used for validation")
+    p.add_argument("--num_classes", type=int, default=3, choices=[2, 3])
+    p.add_argument("--run_name", type=str, default="")
+    return p.parse_args()
 
-OUTPUT_DIR = "outputs"
+args = parse_args()
+
+AUTOTUNE = tf.data.AUTOTUNE
+IMG_SIZE = args.img_size
+BATCH_SIZE = args.batch_size
+EPOCHS = args.epochs
+SEED = args.seed
+VAL_PCT = args.val_pct
+NUM_CLASSES = args.num_classes
+
+RUN_NAME = args.run_name.strip()
+if RUN_NAME == "":
+    RUN_NAME = f"{'binary' if NUM_CLASSES==2 else 'trimap'}_{IMG_SIZE}"
+
+OUTPUT_DIR = os.path.join("outputs", "runs", RUN_NAME)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-MODEL_PATH = os.path.join(OUTPUT_DIR, "best_unet.keras")  # توجه: این مدل قبلی رو overwrite می‌کنه
+
+MODEL_PATH = os.path.join(OUTPUT_DIR, "best_unet.keras")
 
 tf.random.set_seed(SEED)
 np.random.seed(SEED)
 
 print("TensorFlow:", tf.__version__)
 print("TFDS:", tfds.__version__)
+print("RUN_NAME:", RUN_NAME)
+print("IMG_SIZE:", IMG_SIZE, "BATCH_SIZE:", BATCH_SIZE, "EPOCHS:", EPOCHS, "NUM_CLASSES:", NUM_CLASSES)
 print("Saving best model to:", MODEL_PATH)
 
 # =============================
 # Dataset (Train / Val / Test)
 # =============================
-NUM_CLASSES = 3  # masks 1..3 -> shift to 0..2
-VAL_PCT = 10     # 10% of train for validation
-
 (splits, info) = tfds.load(
     "oxford_iiit_pet",
     split=[f"train[:{100-VAL_PCT}%]", f"train[{100-VAL_PCT}%:]", "test"],
     with_info=True,
     shuffle_files=False,  # deterministic split
 )
-
 train_raw, val_raw, test_raw = splits
 
 def to_image_mask(example):
@@ -248,7 +284,14 @@ def preprocess(image, mask):
     image = tf.image.resize(image, (IMG_SIZE, IMG_SIZE))
     mask  = tf.image.resize(mask,  (IMG_SIZE, IMG_SIZE), method="nearest")
     image = tf.cast(image, tf.float32) / 255.0
-    mask  = tf.cast(mask, tf.int32) - 1  # keep [H,W,1] -> values 0..2
+
+    # original masks are 1..3 -> shift to 0..2
+    mask = tf.cast(mask, tf.int32) - 1  # [H,W,1] values 0..2
+
+    # 2-class: background(0) vs pet(1) where pet = {1,2}
+    if NUM_CLASSES == 2:
+        mask = tf.where(mask > 0, 1, 0)
+
     return image, mask
 
 def augment(image, mask):
@@ -382,7 +425,6 @@ callbacks = [
     )
 ]
 
-# ✅ مهم: validation_data الان val_ds است (نه test_ds)
 history = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS, callbacks=callbacks)
 
 # =============================
