@@ -22,24 +22,29 @@ Saves best model to: outputs/best_unet.keras
 ```bash
 python test.py
 ```
-Baseline results (Test) after Train/Val split (90/10):
-
-| Split |   Loss |   mIoU |   Dice |
-| ----: |-------:|-------:|-------:|
-|  Test | 0.3139 | 0.7023 | 0.8111 |
-
 
 ## Demo (Streamlit)
 ```bash
 streamlit run app.py
 ```
+
+
+
+## Experiments
+
+| Exp           | Classes | IMG_SIZE | Loss  | mIoU  | Dice  |
+|---------------|--------:|---------:|------:|------:|------:|
+| trimap_128    | 3       | 128      | 0.2704 | 0.7255 | 0.8273 |
+| binary_128    | 2       | 128      | 0.1623    | 0.8558    | 0.9211    |
+
+
 ## Qualitative Results
 
-### Sample prediction (test set)
-![pred0](assets/pred_0.png)
 
-### Streamlit UI demo output
-![ui](assets/ui_result.png)
+| 3-class (trimap)            | 2-class (binary)              |
+|-----------------------------|-------------------------------|
+| ![pred0](assets/pred_0.png) | ![pred0](assets/pred_0c2.png) |
+
 
 ## Project Structure
 
